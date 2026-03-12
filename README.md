@@ -110,7 +110,24 @@ make test
 make coverage
 make health
 make version
+make ingest-money-status
+PGPASSWORD='***' GOOGLE_SERVICE_ACCOUNT_FILE=.secrets/bank-drive-sa.json \
+GOOGLE_DRIVE_FOLDER_ID='your-folder-id' make ingest-money
 ```
+
+Bank ETL target defaults for `make ingest-money`:
+
+- `MONEY_PGHOST=127.0.0.1`
+- `MONEY_PGPORT=5434`
+- `MONEY_PGDATABASE=money`
+- `MONEY_PGUSER=money`
+- `MONEY_BANK_OUTPUT_DIR=./artifacts`
+
+Required environment variables:
+
+- `GOOGLE_SERVICE_ACCOUNT_FILE`
+- `GOOGLE_DRIVE_FOLDER_ID`
+- `PGPASSWORD`
 
 ## Milestone v0.1 (Initial Target)
 

@@ -2,13 +2,16 @@ import csv
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from src.bank_statement_agent import (
     DriveFile,
-    _parse_pdf_rows_from_text,
     _parse_legacy_bank_csv,
+    _parse_pdf_rows_from_text,
+    get_processed_file_ids,
     normalize_rows,
     parse_statement_file,
+    record_processed_files,
     write_merged_csv,
 )
 
@@ -118,6 +121,32 @@ class BankStatementAgentTests(unittest.TestCase):
         self.assertEqual(rows[0]["transaction_date"], "2021-05-26")
         self.assertEqual(rows[0]["amount"], "2702.50")
         self.assertIn("CATS THIRD PARTY PAYMENT", rows[0]["description"])
+
+    @patch("src.bank_statement_agent._import_psycopg")
+    def test_get_processed_file_ids(self, mock_import_psycopg) -> None:
+        mock_connect = mock_import_psycopg.return_value.connect
+        mock_conn = mock_connect.return_value.__enter__.return_value
+        mock_cur = mock_conn.cursor.return_value.__enter__.return_value
+        mock_cur.fetchall.return_value = [("file1",), ("file2",)]
+
+        ids = get_processed_file_ids()
+
+        self.assertEqual(ids, {"file1", "file2"})
+
+    @patch("src.bank_statement_agent._import_psycopg")
+    def test_record_processed_files(self, mock_import_psycopg) -> None:
+        files = [
+            DriveFile("f1", "a.csv", "text/csv"),
+            DriveFile("f2", "b.pdf", "application/pdf"),
+        ]
+        mock_connect = mock_import_psycopg.return_value.connect
+        mock_conn = mock_connect.return_value.__enter__.return_value
+        mock_cur = mock_conn.cursor.return_value.__enter__.return_value
+
+        record_processed_files(files)
+
+        self.assertEqual(mock_cur.execute.call_count, 2)
+        mock_conn.commit.assert_called_once()
 
 
 if __name__ == "__main__":

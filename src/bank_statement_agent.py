@@ -38,6 +38,16 @@ PDF_TX_LINE_RE = re.compile(
 )
 
 
+def _import_psycopg() -> Any:
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError(
+            "PostgreSQL dependency missing. Install: psycopg[binary]"
+        ) from exc
+    return psycopg
+
+
 @dataclass
 class DriveFile:
     file_id: str
@@ -413,12 +423,7 @@ def load_csv_to_postgres(csv_path: Path) -> int:
 
     Return number of rows upserted.
     """
-    try:
-        import psycopg
-    except ImportError as exc:
-        raise RuntimeError(
-            "PostgreSQL dependency missing. Install: psycopg[binary]"
-        ) from exc
+    psycopg = _import_psycopg()
 
     host = os.getenv("PGHOST", "localhost")
     port = os.getenv("PGPORT", "5432")
@@ -467,6 +472,54 @@ def load_csv_to_postgres(csv_path: Path) -> int:
     return max(rows_upserted, 0)
 
 
+def _build_pg_conninfo() -> str:
+    host = os.getenv("PGHOST", "localhost")
+    port = os.getenv("PGPORT", "5432")
+    dbname = _required_env("PGDATABASE")
+    user = _required_env("PGUSER")
+    password = _required_env("PGPASSWORD")
+    return f"host={host} port={port} dbname={dbname} user={user} password={password}"
+
+
+def get_processed_file_ids() -> set[str]:
+    """Return Drive file IDs already recorded in ingestion history."""
+    psycopg = _import_psycopg()
+
+    conninfo = _build_pg_conninfo()
+    with psycopg.connect(conninfo) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT file_id FROM bank_ingestion.bank_ingestion_file_history"
+            )
+            rows = cur.fetchall()
+    return {str(r[0]) for r in rows}
+
+
+def record_processed_files(files: list[DriveFile]) -> None:
+    """Upsert processed Drive files into ingestion history."""
+    if not files:
+        return
+
+    psycopg = _import_psycopg()
+
+    conninfo = _build_pg_conninfo()
+    with psycopg.connect(conninfo) as conn:
+        with conn.cursor() as cur:
+            for f in files:
+                cur.execute(
+                    "INSERT INTO bank_ingestion.bank_ingestion_file_history "
+                    "(file_id, file_name, mime_type, modified_time) "
+                    "VALUES (%s, %s, %s, %s) "
+                    "ON CONFLICT (file_id) DO UPDATE SET "
+                    "file_name = EXCLUDED.file_name, "
+                    "mime_type = EXCLUDED.mime_type, "
+                    "modified_time = EXCLUDED.modified_time, "
+                    "processed_at = NOW()",
+                    (f.file_id, f.name, f.mime_type, f.modified_time),
+                )
+        conn.commit()
+
+
 def run_agent() -> None:
     folder_id = _required_env("GOOGLE_DRIVE_FOLDER_ID")
     output_dir = Path(os.getenv("BANK_ETL_OUTPUT_DIR", "./artifacts"))
@@ -474,19 +527,25 @@ def run_agent() -> None:
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     drive_files = discover_drive_files(folder_id)
+    processed_ids = get_processed_file_ids()
+    pending_files = [f for f in drive_files if f.file_id not in processed_ids]
 
     all_records: list[NormalizedTransaction] = []
-    for file in drive_files:
+    processed_now: list[DriveFile] = []
+    for file in pending_files:
         local_file = download_drive_file(file, temp_dir)
         raw_rows = parse_statement_file(local_file, file)
         all_records.extend(normalize_rows(raw_rows, file))
+        processed_now.append(file)
 
     merged_csv = write_merged_csv(all_records, output_dir)
     rows_loaded = load_csv_to_postgres(merged_csv)
+    record_processed_files(processed_now)
 
     print(
-        f"Run completed. files={len(drive_files)} rows={len(all_records)} "
-        f"loaded={rows_loaded} csv={merged_csv}"
+        f"Run completed. files_discovered={len(drive_files)} "
+        f"files_processed={len(pending_files)} files_skipped={len(processed_ids)} "
+        f"rows={len(all_records)} loaded={rows_loaded} csv={merged_csv}"
     )
 
 
