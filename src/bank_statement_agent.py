@@ -37,6 +37,8 @@ PDF_TX_LINE_RE = re.compile(
     r"^(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+(.+?)\s+-\s+R\s*([\d\s,]+\.\d{2})$"
 )
 
+NULL_TOKENS = {"null", "none", "n/a", "na", "nil"}
+
 
 def _import_psycopg() -> Any:
     try:
@@ -353,6 +355,49 @@ def _normalize_amount(value: str) -> str | None:
         return None
 
 
+def _normalize_optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.lower() in NULL_TOKENS:
+        return None
+    return text
+
+
+def _first_present(row: dict[str, Any], keys: list[str]) -> str | None:
+    for key in keys:
+        value = _normalize_optional_text(row.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _filter_drive_files(drive_files: list[DriveFile]) -> list[DriveFile]:
+    include_raw = os.getenv("BANK_ETL_INCLUDE_NAME_REGEX", "").strip()
+    exclude_raw = os.getenv("BANK_ETL_EXCLUDE_NAME_REGEX", "").strip()
+
+    include_re = None
+    exclude_re = None
+    try:
+        if include_raw:
+            include_re = re.compile(include_raw, re.IGNORECASE)
+        if exclude_raw:
+            exclude_re = re.compile(exclude_raw, re.IGNORECASE)
+    except re.error as exc:
+        raise RuntimeError(f"Invalid filename regex filter: {exc}") from exc
+
+    filtered: list[DriveFile] = []
+    for file in drive_files:
+        if include_re and not include_re.search(file.name):
+            continue
+        if exclude_re and exclude_re.search(file.name):
+            continue
+        filtered.append(file)
+    return filtered
+
+
 def normalize_rows(
     raw_rows: list[dict[str, Any]], file: DriveFile
 ) -> list[NormalizedTransaction]:
@@ -361,24 +406,31 @@ def normalize_rows(
     now_iso = datetime.now(UTC).isoformat()
 
     for row in raw_rows:
-        tx_date = str(row.get("transaction_date", "")).strip()
-        desc = str(row.get("description", "")).strip()
-        amt = str(row.get("amount", "")).strip()
+        tx_date_raw = _first_present(row, ["transaction_date", "txn_date", "date"])
+        tx_date = _normalize_date(tx_date_raw) if tx_date_raw else None
+        desc = _first_present(row, ["description", "what", "details", "narration"])
+        amt_raw = _first_present(row, ["amount", "amnt", "value"])
+        amt = _normalize_amount(amt_raw) if amt_raw else None
         if not tx_date or not desc or not amt:
             continue
+
+        statement_date_raw = _first_present(row, ["statement_date", "stmt_date"])
+        statement_date = (
+            _normalize_date(statement_date_raw) if statement_date_raw else None
+        )
 
         raw_fingerprint = f"{tx_date}|{desc}|{amt}|{file.file_id}|{file.name}"
         row_hash = hashlib.sha256(raw_fingerprint.encode("utf-8")).hexdigest()
 
         normalized.append(
             NormalizedTransaction(
-                statement_date=(str(row.get("statement_date", "")).strip() or None),
+                statement_date=statement_date,
                 transaction_date=tx_date,
                 description=desc,
                 amount=amt,
-                currency=(str(row.get("currency", "")).strip() or None),
-                account_last4=(str(row.get("account_last4", "")).strip() or None),
-                bank_name=(str(row.get("bank_name", "")).strip() or None),
+                currency=_first_present(row, ["currency", "curr"]),
+                account_last4=_first_present(row, ["account_last4", "account"]),
+                bank_name=_first_present(row, ["bank_name", "bank"]),
                 source_file_id=file.file_id,
                 source_file_name=file.name,
                 source_row_hash=row_hash,
@@ -527,8 +579,9 @@ def run_agent() -> None:
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     drive_files = discover_drive_files(folder_id)
+    candidate_files = _filter_drive_files(drive_files)
     processed_ids = get_processed_file_ids()
-    pending_files = [f for f in drive_files if f.file_id not in processed_ids]
+    pending_files = [f for f in candidate_files if f.file_id not in processed_ids]
 
     all_records: list[NormalizedTransaction] = []
     processed_now: list[DriveFile] = []
@@ -544,7 +597,8 @@ def run_agent() -> None:
 
     print(
         f"Run completed. files_discovered={len(drive_files)} "
-        f"files_processed={len(pending_files)} files_skipped={len(processed_ids)} "
+        f"files_after_filter={len(candidate_files)} "
+        f"files_processed={len(pending_files)} files_skipped={len(candidate_files)-len(pending_files)} "
         f"rows={len(all_records)} loaded={rows_loaded} csv={merged_csv}"
     )
 

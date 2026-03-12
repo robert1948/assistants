@@ -6,6 +6,8 @@ MONEY_PGPORT ?= 5434
 MONEY_PGDATABASE ?= money
 MONEY_PGUSER ?= money
 MONEY_BANK_OUTPUT_DIR ?= ./artifacts
+MONEY_INCLUDE_NAME_REGEX ?= ^(stancard_2503\.csv|RJK_All25\.csv)$$
+MONEY_EXCLUDE_NAME_REGEX ?= ^statement-
 
 .PHONY: run run-persistent test coverage health version help check-ingest-env ingest-money ingest-money-status
 
@@ -19,6 +21,7 @@ help:
 	@echo "  make health            - run assistant health check"
 	@echo "  make version           - print assistant version"
 	@echo "  make ingest-money      - run bank ETL into Money DB via localhost:5434"
+	@echo "                           default filter keeps stancard_2503.csv and RJK_All25.csv"
 	@echo "  make ingest-money-status"
 	@echo "                         show row counts for Money DB ingestion tables"
 
@@ -54,6 +57,8 @@ ingest-money: check-ingest-env
 	PGPORT="$(MONEY_PGPORT)" \
 	PGDATABASE="$(MONEY_PGDATABASE)" \
 	PGUSER="$(MONEY_PGUSER)" \
+	BANK_ETL_INCLUDE_NAME_REGEX="$(MONEY_INCLUDE_NAME_REGEX)" \
+	BANK_ETL_EXCLUDE_NAME_REGEX="$(MONEY_EXCLUDE_NAME_REGEX)" \
 	PGPASSWORD="$(PGPASSWORD)" \
 	$(PYTHON) -m src.bank_statement_agent
 

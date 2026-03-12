@@ -122,6 +122,17 @@ Bank ETL target defaults for `make ingest-money`:
 - `MONEY_PGDATABASE=money`
 - `MONEY_PGUSER=money`
 - `MONEY_BANK_OUTPUT_DIR=./artifacts`
+- `MONEY_INCLUDE_NAME_REGEX=^(stancard_2503\.csv|RJK_All25\.csv)$`
+- `MONEY_EXCLUDE_NAME_REGEX=^statement-`
+
+This default filter excludes `statement-...` files and keeps only
+`stancard_2503.csv` and `RJK_All25.csv`.
+
+To override filtering for a run:
+
+```bash
+MONEY_INCLUDE_NAME_REGEX='.*\.(csv|pdf)$' MONEY_EXCLUDE_NAME_REGEX='' make ingest-money
+```
 
 Required environment variables:
 

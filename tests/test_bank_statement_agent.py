@@ -1,4 +1,5 @@
 import csv
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,6 +7,7 @@ from unittest.mock import patch
 
 from src.bank_statement_agent import (
     DriveFile,
+    _filter_drive_files,
     _parse_legacy_bank_csv,
     _parse_pdf_rows_from_text,
     get_processed_file_ids,
@@ -66,6 +68,65 @@ class BankStatementAgentTests(unittest.TestCase):
         self.assertEqual(len(normalized), 1)
         self.assertEqual(normalized[0].description, "Coffee")
         self.assertEqual(normalized[0].source_file_id, "f1")
+
+    def test_normalize_rows_treats_null_tokens_as_missing(self) -> None:
+        drive_file = DriveFile("f1", "statement.csv", "text/csv")
+        raw_rows = [
+            {
+                "statement_date": "NULL",
+                "transaction_date": "2026-03-01",
+                "description": "Coffee",
+                "amount": "-4.50",
+                "currency": "NULL",
+            }
+        ]
+
+        normalized = normalize_rows(raw_rows, drive_file)
+
+        self.assertEqual(len(normalized), 1)
+        self.assertIsNone(normalized[0].statement_date)
+        self.assertIsNone(normalized[0].currency)
+        self.assertEqual(normalized[0].transaction_date, "2026-03-01")
+
+    def test_normalize_rows_supports_alias_columns(self) -> None:
+        drive_file = DriveFile("f1", "stancard_2503.csv", "text/csv")
+        raw_rows = [
+            {
+                "txn_date": "20240301",
+                "what": "I Afrihost",
+                "amnt": "1337",
+                "cat": "AZ",
+            }
+        ]
+
+        normalized = normalize_rows(raw_rows, drive_file)
+
+        self.assertEqual(len(normalized), 1)
+        self.assertEqual(normalized[0].transaction_date, "2024-03-01")
+        self.assertEqual(normalized[0].description, "I Afrihost")
+        self.assertEqual(normalized[0].amount, "1337.00")
+
+    def test_filter_drive_files_include_and_exclude(self) -> None:
+        files = [
+            DriveFile("1", "statement-07-190-076-4.csv", "text/csv"),
+            DriveFile("2", "stancard_2503.csv", "text/csv"),
+            DriveFile("3", "RJK_All25.csv", "text/csv"),
+            DriveFile("4", "D48.pdf", "application/pdf"),
+        ]
+
+        with patch.dict(
+            os.environ,
+            {
+                "BANK_ETL_INCLUDE_NAME_REGEX": r"^(stancard_2503\.csv|RJK_All25\.csv)$",
+                "BANK_ETL_EXCLUDE_NAME_REGEX": r"^statement-",
+            },
+            clear=False,
+        ):
+            filtered = _filter_drive_files(files)
+
+        self.assertEqual(
+            [f.name for f in filtered], ["stancard_2503.csv", "RJK_All25.csv"]
+        )
 
     def test_write_merged_csv(self) -> None:
         drive_file = DriveFile("f1", "statement.csv", "text/csv")
