@@ -1,0 +1,31 @@
+# VCS
+.git
+.gitignore
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Local environment
+.env
+.env.*
+
+# Python cache/env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node/build artifacts
+node_modules/
+dist/
+build/
+coverage/
+
+# Temp files
+*.tmp
+*.temp

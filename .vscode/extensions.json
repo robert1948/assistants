@@ -1,0 +1,18 @@
+{
+  "recommendations": [
+    "openai.chatgpt",
+    "github.vscode-pull-request-github",
+    "davidanson.vscode-markdownlint",
+    "editorconfig.editorconfig"
+  ],
+  "unwantedRecommendations": [
+    "anthropic.claude-code",
+    "google.geminicodeassist",
+    "sourcegraph.cody-ai",
+    "amazonwebservices.amazon-q-vscode",
+    "doublebot.doublebot",
+    "andrewbutson.vscode-openai",
+    "feiskyer.chatgpt-copilot",
+    "manassahu.openai-developer"
+  ]
+}
