@@ -1,58 +1,36 @@
-"""Minimal CLI assistant implementation."""
+"""CLI entrypoint for the minimal assistant."""
 
 from __future__ import annotations
 
 import argparse
 
+from src.command_router import reset_state, respond
 
-def respond(user_input: str) -> str:
-    """Return deterministic responses for baseline CLI assistant commands."""
-    normalized = user_input.strip()
-
-    if not normalized:
-        return "Please provide a message."
-
-    if normalized == "/help":
-        return (
-            "Usage: text | /todo <item> | /upper <text> | "
-            "/lower <text> | /reverse <text>."
-        )
-
-    if normalized.startswith("/todo"):
-        todo_text = normalized[len("/todo") :].strip()
-        if not todo_text:
-            return "Please provide todo text after '/todo'."
-        return f"TODO captured: {todo_text}"
-
-    if normalized.startswith("/upper"):
-        payload = normalized[len("/upper") :].strip()
-        if not payload:
-            return "Please provide text after '/upper'."
-        return payload.upper()
-
-    if normalized.startswith("/lower"):
-        payload = normalized[len("/lower") :].strip()
-        if not payload:
-            return "Please provide text after '/lower'."
-        return payload.lower()
-
-    if normalized.startswith("/reverse"):
-        payload = normalized[len("/reverse") :].strip()
-        if not payload:
-            return "Please provide text after '/reverse'."
-        return payload[::-1]
-
-    if normalized.startswith("/"):
-        command = normalized.split(maxsplit=1)[0]
-        return f"Unknown command: {command}. Try /help."
-
-    return f"You said: {normalized}"
+__all__ = ["main", "respond", "reset_state"]
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Minimal CLI assistant")
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Run in interactive mode to keep in-memory state across commands.",
+    )
     parser.add_argument("message", nargs="?", default="", help="User message")
     args = parser.parse_args()
+
+    if args.interactive:
+        print("Interactive mode. Type /exit to quit.")
+        while True:
+            try:
+                raw = input("> ").strip()
+            except EOFError:
+                print("\nGoodbye.")
+                return 0
+            if raw == "/exit":
+                print("Goodbye.")
+                return 0
+            print(respond(raw))
 
     print(respond(args.message))
     return 0

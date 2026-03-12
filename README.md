@@ -53,6 +53,18 @@ python3 -m src.assistant_echo "/reverse abc123"
 python3 -m src.assistant_echo "/todo buy milk"
 ```
 
+Interactive mode (stateful todo flow):
+
+```bash
+python3 -m src.assistant_echo --interactive
+# then enter:
+/todo buy milk
+/todo list
+/todo done 1
+/todo list
+/exit
+```
+
 Run tests:
 
 ```bash
