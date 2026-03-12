@@ -33,6 +33,9 @@ FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 
 DATE_TOKEN_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})$")
 AMOUNT_TOKEN_RE = re.compile(r"^[+-]?\d[\d,]*\.?\d{0,2}$")
+PDF_TX_LINE_RE = re.compile(
+    r"^(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+(.+?)\s+-\s+R\s*([\d\s,]+\.\d{2})$"
+)
 
 
 @dataclass
@@ -149,7 +152,9 @@ def download_drive_file(file: DriveFile, target_dir: Path) -> Path:
 
     # Google Sheets require export instead of media download.
     if file.mime_type == "application/vnd.google-apps.spreadsheet":
-        output_name = file.name if file.name.lower().endswith(".csv") else f"{file.name}.csv"
+        output_name = (
+            file.name if file.name.lower().endswith(".csv") else f"{file.name}.csv"
+        )
         target_path = target_dir / output_name
         request = service.files().export_media(fileId=file.file_id, mimeType="text/csv")
     else:
@@ -171,7 +176,13 @@ def parse_statement_file(local_path: Path, file: DriveFile) -> list[dict[str, An
 
     if suffix == ".csv" or file.mime_type in {"text/csv", "application/vnd.ms-excel"}:
         with local_path.open("r", encoding="utf-8-sig", newline="") as f:
-            return [dict(row) for row in csv.DictReader(f)]
+            dict_rows = [dict(row) for row in csv.DictReader(f)]
+
+        # Legacy bank CSVs may have no header and fixed-position columns.
+        if not dict_rows or _looks_like_headerless_csv(dict_rows[0]):
+            return _parse_legacy_bank_csv(local_path)
+
+        return dict_rows
 
     if file.mime_type == "application/vnd.google-apps.spreadsheet" and suffix == ".csv":
         with local_path.open("r", encoding="utf-8-sig", newline="") as f:
@@ -227,6 +238,22 @@ def _parse_pdf_rows_from_text(text: str) -> list[dict[str, Any]]:
         if not line:
             continue
 
+        matched = PDF_TX_LINE_RE.match(line)
+        if matched:
+            date_token, details_token, amount_token = matched.groups()
+            tx_date = _normalize_date(date_token)
+            description = details_token.strip()
+            amount = _normalize_amount(amount_token)
+            if tx_date and description and amount:
+                parsed.append(
+                    {
+                        "transaction_date": tx_date,
+                        "description": description,
+                        "amount": amount,
+                    }
+                )
+            continue
+
         tokens = line.split(" ")
         if len(tokens) < 3:
             continue
@@ -248,6 +275,72 @@ def _parse_pdf_rows_from_text(text: str) -> list[dict[str, Any]]:
             }
         )
     return parsed
+
+
+def _looks_like_headerless_csv(first_row: dict[str, Any]) -> bool:
+    keys = {k.strip() for k in first_row.keys() if k is not None}
+    expected = {"transaction_date", "description", "amount"}
+    return not expected.issubset(keys)
+
+
+def _parse_legacy_bank_csv(local_path: Path) -> list[dict[str, Any]]:
+    parsed: list[dict[str, Any]] = []
+    with local_path.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if len(row) < 5:
+                continue
+            if row[0].strip().upper() != "HIST":
+                continue
+
+            tx_date = _normalize_date(row[1].strip())
+            amount = _normalize_amount(row[3].strip())
+            description = row[4].strip()
+            counterparty = row[5].strip() if len(row) > 5 else ""
+
+            if not tx_date or not amount or not description:
+                continue
+
+            if counterparty:
+                description = f"{description} | {counterparty}"
+
+            parsed.append(
+                {
+                    "transaction_date": tx_date,
+                    "description": description,
+                    "amount": amount,
+                }
+            )
+
+    return parsed
+
+
+def _normalize_date(value: str) -> str | None:
+    value = value.strip()
+    if not value:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y%m%d", "%d/%m/%Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(value, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def _normalize_amount(value: str) -> str | None:
+    value = value.strip()
+    if not value:
+        return None
+    cleaned = value.replace("R", "").replace(" ", "").replace(",", "")
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = f"-{cleaned[1:-1]}"
+    if not cleaned:
+        return None
+    try:
+        return f"{float(cleaned):.2f}"
+    except ValueError:
+        return None
 
 
 def normalize_rows(

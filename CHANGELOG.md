@@ -17,6 +17,8 @@ All notable changes to this project are documented in this file.
 - Recursive Google Drive subfolder discovery for statement files.
 - Google Sheets export-to-CSV ingestion path.
 - Heuristic PDF text parsing support for transaction rows.
+- Legacy headerless CSV statement parsing support.
+- Discovery-style PDF transaction line parsing with date/amount normalization.
 
 ### Changed
 

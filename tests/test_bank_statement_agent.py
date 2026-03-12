@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from src.bank_statement_agent import (
     DriveFile,
     _parse_pdf_rows_from_text,
+    _parse_legacy_bank_csv,
     normalize_rows,
     parse_statement_file,
     write_merged_csv,
@@ -31,8 +32,7 @@ class BankStatementAgentTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "statement.csv"
             path.write_text(
-                "transaction_date,description,amount\n"
-                "2026-03-02,Tea,-2.25\n",
+                "transaction_date,description,amount\n" "2026-03-02,Tea,-2.25\n",
                 encoding="utf-8",
             )
             drive_file = DriveFile(
@@ -94,13 +94,30 @@ class BankStatementAgentTests(unittest.TestCase):
             "2026-03-01 COFFEE SHOP -4.50\n"
             "not a valid line\n"
             "03/02/2026 SALARY 1500.00\n"
+            "14 Jul 2024 ***0522 POS Purchase CLICKS SANTYGER PHARM Western Cape  - R2 311.09\n"
         )
         rows = _parse_pdf_rows_from_text(text)
 
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 3)
         self.assertEqual(rows[0]["transaction_date"], "2026-03-01")
         self.assertEqual(rows[0]["description"], "COFFEE SHOP")
         self.assertEqual(rows[0]["amount"], "-4.50")
+
+    def test_parse_legacy_bank_csv(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "legacy.csv"
+            path.write_text(
+                "0,410,BRANCH,0,,TYGERMANOR,0,0\n"
+                "HIST,20210526,,2702.5,CATS THIRD PARTY PAYMENT,CHEPZA1020001691008611118,134,0\n"
+                "HIST,20210528,,-207,IMMEDIATE PAYMENT,18128695 THE COURIER GUY,1714,0\n",
+                encoding="utf-8",
+            )
+            rows = _parse_legacy_bank_csv(path)
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["transaction_date"], "2021-05-26")
+        self.assertEqual(rows[0]["amount"], "2702.50")
+        self.assertIn("CATS THIRD PARTY PAYMENT", rows[0]["description"])
 
 
 if __name__ == "__main__":
