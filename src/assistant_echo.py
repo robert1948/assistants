@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 from src.command_router import configure_state_file, reset_state, respond
 
 __all__ = ["configure_state_file", "main", "respond", "reset_state"]
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
+
+
+def _resolve_state_file(cli_state_file: str | None) -> str | None:
+    """Resolve state-file preference from CLI arg, env var, then default."""
+    if cli_state_file is not None:
+        return cli_state_file or None
+
+    env_state_file = os.getenv("ASSISTANTS_STATE_FILE")
+    if env_state_file is not None:
+        return env_state_file or None
+
+    return ".assistant_todos.json"
 
 
 def main() -> int:
@@ -25,8 +38,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--state-file",
-        default=".assistant_todos.json",
-        help="Path to todo state JSON file (set empty value to disable persistence).",
+        default=None,
+        help=(
+            "Path to todo state JSON file (set empty value to disable persistence). "
+            "If omitted, ASSISTANTS_STATE_FILE is used when set."
+        ),
     )
     parser.add_argument(
         "--interactive",
@@ -44,7 +60,7 @@ def main() -> int:
         print("ok")
         return 0
 
-    configure_state_file(args.state_file or None)
+    configure_state_file(_resolve_state_file(args.state_file))
 
     if args.interactive:
         print("Interactive mode. Type /exit to quit.")

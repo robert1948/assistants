@@ -45,6 +45,12 @@ python3 -m src.assistant_echo --health
 python3 -m src.assistant_echo --version
 ```
 
+State-file precedence:
+
+- `--state-file` CLI flag (highest priority)
+- `ASSISTANTS_STATE_FILE` environment variable
+- Default: `.assistant_todos.json`
+
 Command examples:
 
 ```bash
@@ -72,6 +78,14 @@ Persistent todo state file:
 ```bash
 python3 -m src.assistant_echo --state-file .assistant_todos.json "/todo buy milk"
 python3 -m src.assistant_echo --state-file .assistant_todos.json "/todo list"
+```
+
+Use environment variable instead of passing the flag each time:
+
+```bash
+export ASSISTANTS_STATE_FILE=.assistant_todos.json
+python3 -m src.assistant_echo "/todo buy milk"
+python3 -m src.assistant_echo "/todo list"
 ```
 
 Disable persistence for one-off runs:

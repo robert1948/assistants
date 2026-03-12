@@ -35,6 +35,7 @@ Provide a minimal command-line assistant that accepts a single user message and 
 - Must be testable with built-in `unittest`.
 - Must provide deterministic output for CI checks.
 - TODO state persists via a local JSON state file for CLI usage.
+- Invalid or malformed state-file content must not crash commands.
 
 ## Acceptance Criteria
 
@@ -42,5 +43,7 @@ Provide a minimal command-line assistant that accepts a single user message and 
 - Running `python3 -m src.assistant_echo --health` returns `ok`.
 - Running `python3 -m src.assistant_echo --version` returns a version string.
 - TODO state survives separate CLI invocations when `--state-file` is set.
+- `ASSISTANTS_STATE_FILE` can define the default persistence path.
+- Malformed state files are ignored safely and treated as empty state.
 - Automated tests pass with `python3 -m unittest discover -s tests -p "test_*.py"`.
 - CI executes tests on push and pull request events.

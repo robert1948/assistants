@@ -31,6 +31,22 @@ class CommandRouterPersistenceTests(unittest.TestCase):
             reset_state()
             self.assertEqual(respond("/todo list"), "[x] 1. buy milk")
 
+    def test_corrupt_state_file_is_ignored(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "todos.json"
+            state_path.write_text("{not-json", encoding="utf-8")
+            configure_state_file(str(state_path))
+
+            self.assertEqual(respond("/todo list"), "No TODO items.")
+
+    def test_non_list_state_payload_is_ignored(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "todos.json"
+            state_path.write_text('{"id": 1, "text": "bad-shape"}', encoding="utf-8")
+            configure_state_file(str(state_path))
+
+            self.assertEqual(respond("/todo list"), "No TODO items.")
+
 
 if __name__ == "__main__":
     unittest.main()
