@@ -37,6 +37,18 @@ assistants/
 3. Add source files under `src/` and tests under `tests/`.
 4. Keep changes small and focused.
 
+Quick run:
+
+```bash
+python3 -m src.assistant_echo "hello"
+```
+
+Run tests:
+
+```bash
+python3 -m unittest discover -s tests -p "test_*.py"
+```
+
 ## Milestone v0.1 (Initial Target)
 
 1. Define a single assistant use case and expected inputs/outputs.

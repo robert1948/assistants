@@ -13,6 +13,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Validate required files
         run: |
           test -f README.md
@@ -27,3 +32,6 @@ jobs:
             echo "CRLF line endings found. Please use LF."
             exit 1
           fi
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -p "test_*.py"
