@@ -1,2 +1,2 @@
 # assistants
-AI  Assitants
+AI Assistants
