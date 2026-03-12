@@ -36,3 +36,5 @@ htmlcov/
 
 # Local assistant state
 .assistant_todos.json
+.secrets/
+artifacts/

@@ -14,12 +14,16 @@ All notable changes to this project are documented in this file.
 - PostgreSQL ingestion schema script in `sql/bank_ingestion_schema.sql`.
 - ETL orchestration skeleton in `src/bank_statement_agent.py`.
 - Basic bank-agent unit tests in `tests/test_bank_statement_agent.py`.
+- Recursive Google Drive subfolder discovery for statement files.
+- Google Sheets export-to-CSV ingestion path.
+- Heuristic PDF text parsing support for transaction rows.
 
 ### Changed
 
 - CI now reports test coverage on the Python 3.12 matrix leg.
 - `src/assistant_echo.py` refactored into parser/run/interactive helpers for testability.
 - `src/bank_statement_agent.py` now includes concrete Google Drive, CSV/XLSX parsing, and PostgreSQL load/upsert implementation paths.
+- `src/bank_statement_agent.py` now supports recursive folder traversal and additional Sheets/PDF parsing paths.
 
 ## 0.2.0 - 2026-03-12
 

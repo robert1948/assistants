@@ -14,10 +14,25 @@ from __future__ import annotations
 import csv
 import hashlib
 import os
+import re
+from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+SUPPORTED_FILE_MIME_TYPES = {
+    "text/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.google-apps.spreadsheet",
+    "application/pdf",
+}
+
+FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+
+DATE_TOKEN_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})$")
+AMOUNT_TOKEN_RE = re.compile(r"^[+-]?\d[\d,]*\.?\d{0,2}$")
 
 
 @dataclass
@@ -50,9 +65,7 @@ def _required_env(name: str) -> str:
     return value
 
 
-def discover_drive_files(folder_id: str) -> list[DriveFile]:
-    """Discover candidate statement files from Google Drive.
-    """
+def _build_drive_service() -> Any:
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
@@ -67,59 +80,63 @@ def discover_drive_files(folder_id: str) -> list[DriveFile]:
     credentials = service_account.Credentials.from_service_account_file(
         creds_path, scopes=scopes
     )
-    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+    return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
-    query = f"'{folder_id}' in parents and trashed = false"
+
+def discover_drive_files(folder_id: str) -> list[DriveFile]:
+    """Discover candidate statement files from Google Drive recursively."""
+    service = _build_drive_service()
+
     fields = "files(id, name, mimeType, modifiedTime), nextPageToken"
 
-    supported_mime_types = {
-        "text/csv",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }
-
     drive_files: list[DriveFile] = []
-    page_token: str | None = None
-    while True:
-        response = (
-            service.files()
-            .list(
-                q=query,
-                fields=fields,
-                pageToken=page_token,
-                pageSize=1000,
-                includeItemsFromAllDrives=False,
-                supportsAllDrives=False,
-            )
-            .execute()
-        )
+    queue: deque[str] = deque([folder_id])
 
-        for f in response.get("files", []):
-            mime_type = f.get("mimeType", "")
-            if mime_type not in supported_mime_types:
-                continue
-            drive_files.append(
-                DriveFile(
-                    file_id=f["id"],
-                    name=f["name"],
-                    mime_type=mime_type,
-                    modified_time=f.get("modifiedTime"),
+    while queue:
+        current_folder = queue.popleft()
+        query = f"'{current_folder}' in parents and trashed = false"
+
+        page_token: str | None = None
+        while True:
+            response = (
+                service.files()
+                .list(
+                    q=query,
+                    fields=fields,
+                    pageToken=page_token,
+                    pageSize=1000,
+                    includeItemsFromAllDrives=False,
+                    supportsAllDrives=False,
                 )
+                .execute()
             )
 
-        page_token = response.get("nextPageToken")
-        if not page_token:
-            break
+            for f in response.get("files", []):
+                mime_type = f.get("mimeType", "")
+                if mime_type == FOLDER_MIME_TYPE:
+                    queue.append(f["id"])
+                    continue
+                if mime_type not in SUPPORTED_FILE_MIME_TYPES:
+                    continue
+                drive_files.append(
+                    DriveFile(
+                        file_id=f["id"],
+                        name=f["name"],
+                        mime_type=mime_type,
+                        modified_time=f.get("modifiedTime"),
+                    )
+                )
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
 
     return drive_files
 
 
 def download_drive_file(file: DriveFile, target_dir: Path) -> Path:
-    """Download a Drive file to target_dir and return local path.
-    """
+    """Download a Drive file to target_dir and return local path."""
     try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
         from googleapiclient.http import MediaIoBaseDownload
     except ImportError as exc:
         raise RuntimeError(
@@ -128,16 +145,17 @@ def download_drive_file(file: DriveFile, target_dir: Path) -> Path:
         ) from exc
 
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / file.name
+    service = _build_drive_service()
 
-    creds_path = _required_env("GOOGLE_SERVICE_ACCOUNT_FILE")
-    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
-    credentials = service_account.Credentials.from_service_account_file(
-        creds_path, scopes=scopes
-    )
-    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+    # Google Sheets require export instead of media download.
+    if file.mime_type == "application/vnd.google-apps.spreadsheet":
+        output_name = file.name if file.name.lower().endswith(".csv") else f"{file.name}.csv"
+        target_path = target_dir / output_name
+        request = service.files().export_media(fileId=file.file_id, mimeType="text/csv")
+    else:
+        target_path = target_dir / file.name
+        request = service.files().get_media(fileId=file.file_id)
 
-    request = service.files().get_media(fileId=file.file_id)
     with target_path.open("wb") as fh:
         downloader = MediaIoBaseDownload(fh, request)
         done = False
@@ -148,11 +166,14 @@ def download_drive_file(file: DriveFile, target_dir: Path) -> Path:
 
 
 def parse_statement_file(local_path: Path, file: DriveFile) -> list[dict[str, Any]]:
-    """Parse a statement file into raw row dictionaries.
-    """
+    """Parse a statement file into raw row dictionaries."""
     suffix = local_path.suffix.lower()
 
     if suffix == ".csv" or file.mime_type in {"text/csv", "application/vnd.ms-excel"}:
+        with local_path.open("r", encoding="utf-8-sig", newline="") as f:
+            return [dict(row) for row in csv.DictReader(f)]
+
+    if file.mime_type == "application/vnd.google-apps.spreadsheet" and suffix == ".csv":
         with local_path.open("r", encoding="utf-8-sig", newline="") as f:
             return [dict(row) for row in csv.DictReader(f)]
 
@@ -183,7 +204,50 @@ def parse_statement_file(local_path: Path, file: DriveFile) -> list[dict[str, An
             )
         return parsed
 
+    if suffix == ".pdf" or file.mime_type == "application/pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError as exc:
+            raise RuntimeError("PDF support requires pypdf. Install: pypdf") from exc
+
+        reader = PdfReader(str(local_path))
+        text_chunks: list[str] = []
+        for page in reader.pages:
+            text_chunks.append(page.extract_text() or "")
+        return _parse_pdf_rows_from_text("\n".join(text_chunks))
+
     raise ValueError(f"Unsupported statement format: {local_path.name}")
+
+
+def _parse_pdf_rows_from_text(text: str) -> list[dict[str, Any]]:
+    """Heuristic parser for PDF text rows: <date> <description> <amount>."""
+    parsed: list[dict[str, Any]] = []
+    for raw_line in text.splitlines():
+        line = " ".join(raw_line.strip().split())
+        if not line:
+            continue
+
+        tokens = line.split(" ")
+        if len(tokens) < 3:
+            continue
+        if not DATE_TOKEN_RE.match(tokens[0]):
+            continue
+        if not AMOUNT_TOKEN_RE.match(tokens[-1]):
+            continue
+
+        amount = tokens[-1].replace(",", "")
+        description = " ".join(tokens[1:-1]).strip()
+        if not description:
+            continue
+
+        parsed.append(
+            {
+                "transaction_date": tokens[0],
+                "description": description,
+                "amount": amount,
+            }
+        )
+    return parsed
 
 
 def normalize_rows(
@@ -259,7 +323,9 @@ def load_csv_to_postgres(csv_path: Path) -> int:
     try:
         import psycopg
     except ImportError as exc:
-        raise RuntimeError("PostgreSQL dependency missing. Install: psycopg[binary]") from exc
+        raise RuntimeError(
+            "PostgreSQL dependency missing. Install: psycopg[binary]"
+        ) from exc
 
     host = os.getenv("PGHOST", "localhost")
     port = os.getenv("PGPORT", "5432")

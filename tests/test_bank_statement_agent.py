@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 
 from src.bank_statement_agent import (
     DriveFile,
+    _parse_pdf_rows_from_text,
     normalize_rows,
     parse_statement_file,
     write_merged_csv,
@@ -25,6 +26,22 @@ class BankStatementAgentTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["description"], "Coffee")
+
+    def test_parse_google_sheet_exported_csv(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "statement.csv"
+            path.write_text(
+                "transaction_date,description,amount\n"
+                "2026-03-02,Tea,-2.25\n",
+                encoding="utf-8",
+            )
+            drive_file = DriveFile(
+                "f2", "statement", "application/vnd.google-apps.spreadsheet"
+            )
+            rows = parse_statement_file(path, drive_file)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["description"], "Tea")
 
     def test_normalize_rows_skips_incomplete(self) -> None:
         drive_file = DriveFile("f1", "statement.csv", "text/csv")
@@ -71,6 +88,19 @@ class BankStatementAgentTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["description"], "Coffee")
+
+    def test_parse_pdf_rows_from_text(self) -> None:
+        text = (
+            "2026-03-01 COFFEE SHOP -4.50\n"
+            "not a valid line\n"
+            "03/02/2026 SALARY 1500.00\n"
+        )
+        rows = _parse_pdf_rows_from_text(text)
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["transaction_date"], "2026-03-01")
+        self.assertEqual(rows[0]["description"], "COFFEE SHOP")
+        self.assertEqual(rows[0]["amount"], "-4.50")
 
 
 if __name__ == "__main__":

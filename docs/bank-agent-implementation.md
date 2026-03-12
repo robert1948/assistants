@@ -8,9 +8,8 @@ This document describes how to build an AI-assisted ETL agent that:
 
 ## 1. Scope and assumptions
 
-- Statements are stored in one Drive folder (or a small set of folders).
-- Supported formats for first release: CSV and XLSX.
-- PDF support is optional and should be added as a separate parser module.
+- Statements are discovered recursively under a root Drive folder.
+- Supported formats: CSV, XLSX, Google Sheets (exported as CSV), and PDF.
 - Data is loaded to a local PostgreSQL instance.
 
 ## 2. Security baseline
@@ -34,6 +33,7 @@ Suggested Python packages:
 - `google-auth`
 - `psycopg[binary]`
 - `openpyxl` (only if ingesting `.xlsx` statements)
+- `pypdf` (only if ingesting `.pdf` statements)
 
 ## 3. Workflow
 
