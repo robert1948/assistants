@@ -120,3 +120,7 @@ make version
 ## License
 
 This project is licensed under the terms in `LICENSE`.
+
+## Changelog
+
+Release history is tracked in `CHANGELOG.md`.
