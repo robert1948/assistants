@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- CLI subprocess integration tests in `tests/test_cli_integration.py`.
+- Coverage configuration in `.coveragerc`.
+- Makefile target `coverage` for local coverage reports.
+
+### Changed
+
+- CI now reports test coverage on the Python 3.12 matrix leg.
+
 ## 0.2.0 - 2026-03-12
 
 ### Added

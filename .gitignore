@@ -27,6 +27,8 @@ node_modules/
 dist/
 build/
 coverage/
+.coverage
+htmlcov/
 
 # Temporary files
 *.tmp

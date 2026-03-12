@@ -98,6 +98,7 @@ Run tests:
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py"
+make coverage
 ```
 
 Makefile shortcuts:
@@ -106,6 +107,7 @@ Makefile shortcuts:
 make run MSG="hello"
 make run-persistent MSG="/todo list" STATE_FILE=.assistant_todos.json
 make test
+make coverage
 make health
 make version
 ```

@@ -38,3 +38,11 @@ jobs:
 
       - name: Run tests via Makefile
         run: make test
+
+      - name: Install coverage tooling
+        if: matrix.python-version == '3.12'
+        run: python -m pip install coverage
+
+      - name: Report test coverage
+        if: matrix.python-version == '3.12'
+        run: make coverage
