@@ -34,10 +34,13 @@ Provide a minimal command-line assistant that accepts a single user message and 
 - Must run with standard Python only (no third-party dependencies).
 - Must be testable with built-in `unittest`.
 - Must provide deterministic output for CI checks.
-- TODO state is in-memory only (process-local) for this milestone.
+- TODO state persists via a local JSON state file for CLI usage.
 
 ## Acceptance Criteria
 
-- Running `python -m src.assistant_echo "hello"` returns a valid response.
-- Automated tests pass with `python -m unittest discover -s tests -p "test_*.py"`.
+- Running `python3 -m src.assistant_echo "hello"` returns a valid response.
+- Running `python3 -m src.assistant_echo --health` returns `ok`.
+- Running `python3 -m src.assistant_echo --version` returns a version string.
+- TODO state survives separate CLI invocations when `--state-file` is set.
+- Automated tests pass with `python3 -m unittest discover -s tests -p "test_*.py"`.
 - CI executes tests on push and pull request events.

@@ -1,8 +1,10 @@
-"""Command routing and in-memory state for the minimal CLI assistant."""
+"""Command routing and optional JSON-backed state for the CLI assistant."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -13,11 +15,57 @@ class TodoItem:
 
 
 _TODOS: list[TodoItem] = []
+_STATE_FILE: Path | None = None
+
+
+def configure_state_file(path: str | None) -> None:
+    """Configure optional JSON state file used by todo commands."""
+    global _STATE_FILE
+    _STATE_FILE = Path(path) if path else None
+    _load_todos()
 
 
 def reset_state() -> None:
     """Reset in-memory state for deterministic tests."""
     _TODOS.clear()
+
+
+def _load_todos() -> None:
+    _TODOS.clear()
+    if _STATE_FILE is None or not _STATE_FILE.exists():
+        return
+
+    try:
+        raw = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return
+
+    if not isinstance(raw, list):
+        return
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        todo_id = item.get("id")
+        text = item.get("text")
+        done = item.get("done", False)
+        if isinstance(todo_id, int) and todo_id > 0 and isinstance(text, str):
+            _TODOS.append(TodoItem(id=todo_id, text=text, done=bool(done)))
+
+
+def _save_todos() -> None:
+    if _STATE_FILE is None:
+        return
+
+    try:
+        _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = [
+            {"id": item.id, "text": item.text, "done": item.done} for item in _TODOS
+        ]
+        _STATE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except OSError:
+        # Keep assistant responsive even if persistence cannot be written.
+        pass
 
 
 def _handle_todo(todo_payload: str) -> str:
@@ -47,11 +95,13 @@ def _handle_todo(todo_payload: str) -> str:
                 if item.done:
                     return f"TODO #{todo_id} is already done."
                 item.done = True
+                _save_todos()
                 return f"TODO #{todo_id} marked done."
         return f"TODO #{todo_id} not found."
 
     next_id = len(_TODOS) + 1
     _TODOS.append(TodoItem(id=next_id, text=todo_payload))
+    _save_todos()
     return f"TODO #{next_id} captured: {todo_payload}"
 
 
@@ -69,6 +119,8 @@ def respond(user_input: str) -> str:
         )
 
     if normalized.startswith("/todo"):
+        if _STATE_FILE is not None:
+            _load_todos()
         todo_payload = normalized[len("/todo") :].strip()
         return _handle_todo(todo_payload)
 

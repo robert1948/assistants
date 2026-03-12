@@ -25,9 +25,9 @@ structure simple, documented, and ready for incremental feature delivery.
 
 ```text
 assistants/
-	docs/           # Project and design documentation
-	src/            # Application/source code
-	tests/          # Automated tests
+  docs/           # Project and design documentation
+  src/            # Application/source code
+  tests/          # Automated tests
 ```
 
 ## Getting Started
@@ -41,6 +41,8 @@ Quick run:
 
 ```bash
 python3 -m src.assistant_echo "hello"
+python3 -m src.assistant_echo --health
+python3 -m src.assistant_echo --version
 ```
 
 Command examples:
@@ -63,6 +65,19 @@ python3 -m src.assistant_echo --interactive
 /todo done 1
 /todo list
 /exit
+```
+
+Persistent todo state file:
+
+```bash
+python3 -m src.assistant_echo --state-file .assistant_todos.json "/todo buy milk"
+python3 -m src.assistant_echo --state-file .assistant_todos.json "/todo list"
+```
+
+Disable persistence for one-off runs:
+
+```bash
+python3 -m src.assistant_echo --state-file "" "/todo list"
 ```
 
 Run tests:
