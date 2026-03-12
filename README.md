@@ -119,6 +119,15 @@ make version
 3. Add baseline tests for the workflow.
 4. Document usage and known limitations.
 
+## Bank ETL Agent Blueprint
+
+For a concrete implementation plan for Google Drive statement ingestion and
+PostgreSQL loading, see:
+
+- `docs/bank-agent-implementation.md`
+- `sql/bank_ingestion_schema.sql`
+- `src/bank_statement_agent.py`
+
 ## License
 
 This project is licensed under the terms in `LICENSE`.

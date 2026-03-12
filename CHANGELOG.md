@@ -10,6 +10,9 @@ All notable changes to this project are documented in this file.
 - Coverage configuration in `.coveragerc`.
 - Makefile target `coverage` for local coverage reports.
 - Entrypoint-focused unit tests in `tests/test_assistant_entrypoint.py`.
+- Bank statement ETL implementation blueprint in `docs/bank-agent-implementation.md`.
+- PostgreSQL ingestion schema script in `sql/bank_ingestion_schema.sql`.
+- ETL orchestration skeleton in `src/bank_statement_agent.py`.
 
 ### Changed
 
