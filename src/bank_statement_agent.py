@@ -64,6 +64,7 @@ class NormalizedTransaction:
     transaction_date: str
     description: str
     amount: str
+    cat: str | None
     currency: str | None
     account_last4: str | None
     bank_name: str | None
@@ -442,6 +443,7 @@ def normalize_rows(
                 transaction_date=tx_date,
                 description=desc,
                 amount=amt,
+                cat=_first_present(row, ["cat", "category"]),
                 currency=_first_present(row, ["currency", "curr"]),
                 account_last4=_first_present(row, ["account_last4", "account"]),
                 bank_name=_first_present(row, ["bank_name", "bank"]),
@@ -466,6 +468,7 @@ def write_merged_csv(records: list[NormalizedTransaction], output_dir: Path) -> 
         "transaction_date",
         "description",
         "amount",
+        "cat",
         "currency",
         "account_last4",
         "bank_name",
@@ -498,7 +501,7 @@ def load_csv_to_postgres(csv_path: Path) -> int:
     password = _required_env("PGPASSWORD")
 
     copy_columns = (
-        "statement_date, transaction_date, description, amount, currency, "
+        "statement_date, transaction_date, description, amount, cat, currency, "
         "account_last4, bank_name, source_file_id, source_file_name, "
         "source_row_hash, ingested_at"
     )
@@ -521,16 +524,17 @@ def load_csv_to_postgres(csv_path: Path) -> int:
 
             cur.execute(
                 "INSERT INTO bank_ingestion.bank_transactions ("
-                "statement_date, transaction_date, description, amount, currency, "
+                "statement_date, transaction_date, description, amount, cat, currency, "
                 "account_last4, bank_name, source_file_id, source_file_name, "
                 "source_row_hash, ingested_at"
                 ") "
                 "SELECT "
-                "statement_date, transaction_date, description, amount, currency, "
+                "statement_date, transaction_date, description, amount, cat, currency, "
                 "account_last4, bank_name, source_file_id, source_file_name, "
                 "source_row_hash, ingested_at "
                 "FROM bank_ingestion.bank_transactions_staging "
-                "ON CONFLICT (source_row_hash) DO NOTHING"
+                "ON CONFLICT (source_row_hash) DO UPDATE "
+                "SET cat = COALESCE(bank_ingestion.bank_transactions.cat, EXCLUDED.cat)"
             )
             rows_upserted = cur.rowcount
         conn.commit()

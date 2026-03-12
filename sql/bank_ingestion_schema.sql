@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS bank_ingestion.bank_transactions_staging (
     transaction_date DATE NOT NULL,
     description TEXT NOT NULL,
     amount NUMERIC(18, 2) NOT NULL,
+    cat TEXT,
     currency TEXT,
     account_last4 TEXT,
     bank_name TEXT,
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS bank_ingestion.bank_transactions (
     transaction_date DATE NOT NULL,
     description TEXT NOT NULL,
     amount NUMERIC(18, 2) NOT NULL,
+    cat TEXT,
     currency TEXT,
     account_last4 TEXT,
     bank_name TEXT,
@@ -69,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_bank_transactions_account
 --     transaction_date,
 --     description,
 --     amount,
+--     cat,
 --     currency,
 --     account_last4,
 --     bank_name,
@@ -82,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_bank_transactions_account
 --     transaction_date,
 --     description,
 --     amount,
+--     cat,
 --     currency,
 --     account_last4,
 --     bank_name,
@@ -90,4 +94,5 @@ CREATE INDEX IF NOT EXISTS idx_bank_transactions_account
 --     source_row_hash,
 --     ingested_at
 -- FROM bank_ingestion.bank_transactions_staging
--- ON CONFLICT (source_row_hash) DO NOTHING;
+-- ON CONFLICT (source_row_hash) DO UPDATE
+-- SET cat = COALESCE(bank_ingestion.bank_transactions.cat, EXCLUDED.cat);

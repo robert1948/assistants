@@ -106,6 +106,7 @@ class BankStatementAgentTests(unittest.TestCase):
         self.assertEqual(normalized[0].transaction_date, "2024-03-01")
         self.assertEqual(normalized[0].description, "I Afrihost")
         self.assertEqual(normalized[0].amount, "1337.00")
+        self.assertEqual(normalized[0].cat, "AZ")
 
     def test_row_hash_dedupes_across_sources(self) -> None:
         csv_file = DriveFile("c1", "RJK_All25.csv", "text/csv")
@@ -179,6 +180,7 @@ class BankStatementAgentTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["description"], "Coffee")
+        self.assertIn("cat", rows[0])
 
     def test_parse_pdf_rows_from_text(self) -> None:
         text = (
