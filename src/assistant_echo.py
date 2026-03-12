@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Callable
 
 from src.command_router import configure_state_file, reset_state, respond
 
-__all__ = ["configure_state_file", "main", "respond", "reset_state"]
+__all__ = ["configure_state_file", "main", "respond", "reset_state", "run"]
 
 VERSION = "0.2.0"
 
@@ -24,7 +25,7 @@ def _resolve_state_file(cli_state_file: str | None) -> str | None:
     return ".assistant_todos.json"
 
 
-def main() -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Minimal CLI assistant")
     parser.add_argument(
         "--version",
@@ -50,33 +51,53 @@ def main() -> int:
         help="Run in interactive mode for multi-command sessions.",
     )
     parser.add_argument("message", nargs="?", default="", help="User message")
-    args = parser.parse_args()
+    return parser
+
+
+def _run_interactive(
+    read_input: Callable[[str], str] = input,
+    write_output: Callable[[str], None] = print,
+) -> int:
+    write_output("Interactive mode. Type /exit to quit.")
+    while True:
+        try:
+            raw = read_input("> ").strip()
+        except EOFError:
+            write_output("\nGoodbye.")
+            return 0
+        if raw == "/exit":
+            write_output("Goodbye.")
+            return 0
+        write_output(respond(raw))
+
+
+def run(
+    args: argparse.Namespace,
+    read_input: Callable[[str], str] = input,
+    write_output: Callable[[str], None] = print,
+) -> int:
 
     if args.version:
-        print(f"assistants-cli {VERSION}")
+        write_output(f"assistants-cli {VERSION}")
         return 0
 
     if args.health:
-        print("ok")
+        write_output("ok")
         return 0
 
     configure_state_file(_resolve_state_file(args.state_file))
 
     if args.interactive:
-        print("Interactive mode. Type /exit to quit.")
-        while True:
-            try:
-                raw = input("> ").strip()
-            except EOFError:
-                print("\nGoodbye.")
-                return 0
-            if raw == "/exit":
-                print("Goodbye.")
-                return 0
-            print(respond(raw))
+        return _run_interactive(read_input=read_input, write_output=write_output)
 
-    print(respond(args.message))
+    write_output(respond(args.message))
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    return run(args)
 
 
 if __name__ == "__main__":
