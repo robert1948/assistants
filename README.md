@@ -90,7 +90,10 @@ Makefile shortcuts:
 
 ```bash
 make run MSG="hello"
+make run-persistent MSG="/todo list" STATE_FILE=.assistant_todos.json
 make test
+make health
+make version
 ```
 
 ## Milestone v0.1 (Initial Target)
