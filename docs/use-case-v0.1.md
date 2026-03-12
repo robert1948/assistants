@@ -10,13 +10,20 @@ Provide a minimal command-line assistant that accepts a single user message and 
 - Optional command-like prefixes:
   - `/help`
   - `/todo <text>`
+  - `/upper <text>`
+  - `/lower <text>`
+  - `/reverse <text>`
 
 ## Outputs
 
 - For `/help`: usage guidance.
 - For `/todo <text>`: acknowledgement of captured todo text.
+- For `/upper <text>`: transformed uppercase text.
+- For `/lower <text>`: transformed lowercase text.
+- For `/reverse <text>`: reversed text.
 - For general text: normalized echo response.
 - For empty input: prompt requesting a valid message.
+- For unsupported slash commands: deterministic unknown-command message.
 
 ## Constraints
 

@@ -43,10 +43,27 @@ Quick run:
 python3 -m src.assistant_echo "hello"
 ```
 
+Command examples:
+
+```bash
+python3 -m src.assistant_echo "/help"
+python3 -m src.assistant_echo "/upper hello world"
+python3 -m src.assistant_echo "/lower HeLLo"
+python3 -m src.assistant_echo "/reverse abc123"
+python3 -m src.assistant_echo "/todo buy milk"
+```
+
 Run tests:
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py"
+```
+
+Makefile shortcuts:
+
+```bash
+make run MSG="hello"
+make test
 ```
 
 ## Milestone v0.1 (Initial Target)
