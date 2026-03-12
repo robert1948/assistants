@@ -291,8 +291,16 @@ def _parse_pdf_rows_from_text(text: str) -> list[dict[str, Any]]:
 
 def _looks_like_headerless_csv(first_row: dict[str, Any]) -> bool:
     keys = {k.strip() for k in first_row.keys() if k is not None}
-    expected = {"transaction_date", "description", "amount"}
-    return not expected.issubset(keys)
+    canonical = {"transaction_date", "description", "amount"}
+    aliases = {"txn_date", "date", "what", "details", "amnt", "value"}
+
+    # Treat as structured CSV if canonical headers or supported aliases are present.
+    if canonical.issubset(keys):
+        return False
+    if len(keys.intersection(aliases)) >= 2:
+        return False
+
+    return True
 
 
 def _parse_legacy_bank_csv(local_path: Path) -> list[dict[str, Any]]:
@@ -374,6 +382,13 @@ def _first_present(row: dict[str, Any], keys: list[str]) -> str | None:
     return None
 
 
+def _business_row_hash(tx_date: str, desc: str, amt: str) -> str:
+    # Normalize spacing/casing so equivalent entries across sources dedupe reliably.
+    desc_key = " ".join(desc.split()).lower()
+    fingerprint = f"{tx_date}|{desc_key}|{amt}"
+    return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+
+
 def _filter_drive_files(drive_files: list[DriveFile]) -> list[DriveFile]:
     include_raw = os.getenv("BANK_ETL_INCLUDE_NAME_REGEX", "").strip()
     exclude_raw = os.getenv("BANK_ETL_EXCLUDE_NAME_REGEX", "").strip()
@@ -419,8 +434,7 @@ def normalize_rows(
             _normalize_date(statement_date_raw) if statement_date_raw else None
         )
 
-        raw_fingerprint = f"{tx_date}|{desc}|{amt}|{file.file_id}|{file.name}"
-        row_hash = hashlib.sha256(raw_fingerprint.encode("utf-8")).hexdigest()
+        row_hash = _business_row_hash(tx_date, desc, amt)
 
         normalized.append(
             NormalizedTransaction(

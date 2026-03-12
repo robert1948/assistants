@@ -8,6 +8,7 @@ from unittest.mock import patch
 from src.bank_statement_agent import (
     DriveFile,
     _filter_drive_files,
+    _looks_like_headerless_csv,
     _parse_legacy_bank_csv,
     _parse_pdf_rows_from_text,
     get_processed_file_ids,
@@ -106,6 +107,22 @@ class BankStatementAgentTests(unittest.TestCase):
         self.assertEqual(normalized[0].description, "I Afrihost")
         self.assertEqual(normalized[0].amount, "1337.00")
 
+    def test_row_hash_dedupes_across_sources(self) -> None:
+        csv_file = DriveFile("c1", "RJK_All25.csv", "text/csv")
+        pdf_file = DriveFile("p1", "D48.pdf", "application/pdf")
+        row = {
+            "transaction_date": "2024-04-16",
+            "description": "***8266 POS Purchase DBNVILLE MKT DURBANVILLE",
+            "amount": "458.10",
+        }
+
+        csv_norm = normalize_rows([row], csv_file)
+        pdf_norm = normalize_rows([row], pdf_file)
+
+        self.assertEqual(len(csv_norm), 1)
+        self.assertEqual(len(pdf_norm), 1)
+        self.assertEqual(csv_norm[0].source_row_hash, pdf_norm[0].source_row_hash)
+
     def test_filter_drive_files_include_and_exclude(self) -> None:
         files = [
             DriveFile("1", "statement-07-190-076-4.csv", "text/csv"),
@@ -127,6 +144,16 @@ class BankStatementAgentTests(unittest.TestCase):
         self.assertEqual(
             [f.name for f in filtered], ["stancard_2503.csv", "RJK_All25.csv"]
         )
+
+    def test_alias_headers_are_not_headerless(self) -> None:
+        first_row = {
+            "id": "42",
+            "txn_date": "20240301",
+            "cat": "AZ",
+            "amnt": "1337",
+            "what": "I Afrihost",
+        }
+        self.assertFalse(_looks_like_headerless_csv(first_row))
 
     def test_write_merged_csv(self) -> None:
         drive_file = DriveFile("f1", "statement.csv", "text/csv")
