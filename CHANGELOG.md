@@ -13,11 +13,13 @@ All notable changes to this project are documented in this file.
 - Bank statement ETL implementation blueprint in `docs/bank-agent-implementation.md`.
 - PostgreSQL ingestion schema script in `sql/bank_ingestion_schema.sql`.
 - ETL orchestration skeleton in `src/bank_statement_agent.py`.
+- Basic bank-agent unit tests in `tests/test_bank_statement_agent.py`.
 
 ### Changed
 
 - CI now reports test coverage on the Python 3.12 matrix leg.
 - `src/assistant_echo.py` refactored into parser/run/interactive helpers for testability.
+- `src/bank_statement_agent.py` now includes concrete Google Drive, CSV/XLSX parsing, and PostgreSQL load/upsert implementation paths.
 
 ## 0.2.0 - 2026-03-12
 

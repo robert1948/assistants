@@ -28,6 +28,13 @@ Suggested environment variables:
 - `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`
 - `BANK_ETL_OUTPUT_DIR`
 
+Suggested Python packages:
+
+- `google-api-python-client`
+- `google-auth`
+- `psycopg[binary]`
+- `openpyxl` (only if ingesting `.xlsx` statements)
+
 ## 3. Workflow
 
 1. Discover candidate files from Google Drive folder.

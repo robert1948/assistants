@@ -1,11 +1,12 @@
-"""Bank statement ETL agent skeleton.
+"""Bank statement ETL agent implementation template.
 
 This module provides a practical orchestration template for:
 1) downloading statements from Google Drive,
 2) normalizing and merging records,
 3) loading records to PostgreSQL.
 
-Note: external integrations are intentionally left as stubs with clear TODOs.
+Google Drive and PostgreSQL integrations are implemented with optional
+dependencies and explicit environment-variable configuration.
 """
 
 from __future__ import annotations
@@ -51,35 +52,143 @@ def _required_env(name: str) -> str:
 
 def discover_drive_files(folder_id: str) -> list[DriveFile]:
     """Discover candidate statement files from Google Drive.
-
-    TODO: Implement with Google Drive API.
-    Filters should include mime type and optional naming/date rules.
     """
-    _ = folder_id
-    return []
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError as exc:
+        raise RuntimeError(
+            "Google Drive dependencies missing. Install: "
+            "google-api-python-client google-auth"
+        ) from exc
+
+    creds_path = _required_env("GOOGLE_SERVICE_ACCOUNT_FILE")
+    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+    credentials = service_account.Credentials.from_service_account_file(
+        creds_path, scopes=scopes
+    )
+    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+    query = f"'{folder_id}' in parents and trashed = false"
+    fields = "files(id, name, mimeType, modifiedTime), nextPageToken"
+
+    supported_mime_types = {
+        "text/csv",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
+    drive_files: list[DriveFile] = []
+    page_token: str | None = None
+    while True:
+        response = (
+            service.files()
+            .list(
+                q=query,
+                fields=fields,
+                pageToken=page_token,
+                pageSize=1000,
+                includeItemsFromAllDrives=False,
+                supportsAllDrives=False,
+            )
+            .execute()
+        )
+
+        for f in response.get("files", []):
+            mime_type = f.get("mimeType", "")
+            if mime_type not in supported_mime_types:
+                continue
+            drive_files.append(
+                DriveFile(
+                    file_id=f["id"],
+                    name=f["name"],
+                    mime_type=mime_type,
+                    modified_time=f.get("modifiedTime"),
+                )
+            )
+
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    return drive_files
 
 
 def download_drive_file(file: DriveFile, target_dir: Path) -> Path:
     """Download a Drive file to target_dir and return local path.
-
-    TODO: Implement with Google Drive API media download.
     """
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseDownload
+    except ImportError as exc:
+        raise RuntimeError(
+            "Google Drive dependencies missing. Install: "
+            "google-api-python-client google-auth"
+        ) from exc
+
+    target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / file.name
-    target_path.touch()
+
+    creds_path = _required_env("GOOGLE_SERVICE_ACCOUNT_FILE")
+    scopes = ["https://www.googleapis.com/auth/drive.readonly"]
+    credentials = service_account.Credentials.from_service_account_file(
+        creds_path, scopes=scopes
+    )
+    service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+    request = service.files().get_media(fileId=file.file_id)
+    with target_path.open("wb") as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
     return target_path
 
 
 def parse_statement_file(local_path: Path, file: DriveFile) -> list[dict[str, Any]]:
     """Parse a statement file into raw row dictionaries.
-
-    TODO: Implement format-specific parsers (CSV/XLSX/PDF).
     """
-    _ = local_path
-    _ = file
-    return []
+    suffix = local_path.suffix.lower()
+
+    if suffix == ".csv" or file.mime_type in {"text/csv", "application/vnd.ms-excel"}:
+        with local_path.open("r", encoding="utf-8-sig", newline="") as f:
+            return [dict(row) for row in csv.DictReader(f)]
+
+    if suffix == ".xlsx" or file.mime_type == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ):
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise RuntimeError(
+                "XLSX support requires openpyxl. Install: openpyxl"
+            ) from exc
+
+        wb = load_workbook(local_path, read_only=True, data_only=True)
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return []
+        headers = [str(cell).strip() if cell is not None else "" for cell in rows[0]]
+        parsed: list[dict[str, Any]] = []
+        for row in rows[1:]:
+            parsed.append(
+                {
+                    headers[idx]: ("" if value is None else str(value).strip())
+                    for idx, value in enumerate(row)
+                    if idx < len(headers) and headers[idx]
+                }
+            )
+        return parsed
+
+    raise ValueError(f"Unsupported statement format: {local_path.name}")
 
 
-def normalize_rows(raw_rows: list[dict[str, Any]], file: DriveFile) -> list[NormalizedTransaction]:
+def normalize_rows(
+    raw_rows: list[dict[str, Any]], file: DriveFile
+) -> list[NormalizedTransaction]:
     """Normalize raw rows into canonical transaction records."""
     normalized: list[NormalizedTransaction] = []
     now_iso = datetime.now(UTC).isoformat()
@@ -145,18 +254,58 @@ def write_merged_csv(records: list[NormalizedTransaction], output_dir: Path) -> 
 def load_csv_to_postgres(csv_path: Path) -> int:
     """Load merged CSV into PostgreSQL staging and upsert into final table.
 
-    TODO: Implement with psycopg or SQLAlchemy.
-    Recommended sequence:
-    1) BEGIN transaction
-    2) TRUNCATE staging
-    3) COPY CSV into staging
-    4) INSERT .. ON CONFLICT into final table
-    5) COMMIT
-
     Return number of rows upserted.
     """
-    _ = csv_path
-    return 0
+    try:
+        import psycopg
+    except ImportError as exc:
+        raise RuntimeError("PostgreSQL dependency missing. Install: psycopg[binary]") from exc
+
+    host = os.getenv("PGHOST", "localhost")
+    port = os.getenv("PGPORT", "5432")
+    dbname = _required_env("PGDATABASE")
+    user = _required_env("PGUSER")
+    password = _required_env("PGPASSWORD")
+
+    copy_columns = (
+        "statement_date, transaction_date, description, amount, currency, "
+        "account_last4, bank_name, source_file_id, source_file_name, "
+        "source_row_hash, ingested_at"
+    )
+
+    conninfo = (
+        f"host={host} port={port} dbname={dbname} user={user} password={password}"
+    )
+
+    with psycopg.connect(conninfo) as conn:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE bank_ingestion.bank_transactions_staging")
+
+            with csv_path.open("r", encoding="utf-8") as csv_f:
+                with cur.copy(
+                    "COPY bank_ingestion.bank_transactions_staging "
+                    f"({copy_columns}) FROM STDIN WITH (FORMAT csv, HEADER true)"
+                ) as copy:
+                    while chunk := csv_f.read(1024 * 1024):
+                        copy.write(chunk)
+
+            cur.execute(
+                "INSERT INTO bank_ingestion.bank_transactions ("
+                "statement_date, transaction_date, description, amount, currency, "
+                "account_last4, bank_name, source_file_id, source_file_name, "
+                "source_row_hash, ingested_at"
+                ") "
+                "SELECT "
+                "statement_date, transaction_date, description, amount, currency, "
+                "account_last4, bank_name, source_file_id, source_file_name, "
+                "source_row_hash, ingested_at "
+                "FROM bank_ingestion.bank_transactions_staging "
+                "ON CONFLICT (source_row_hash) DO NOTHING"
+            )
+            rows_upserted = cur.rowcount
+        conn.commit()
+
+    return max(rows_upserted, 0)
 
 
 def run_agent() -> None:
